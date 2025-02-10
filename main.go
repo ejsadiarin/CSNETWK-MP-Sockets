@@ -62,6 +62,7 @@ func client() {
 		} else {
 			fmt.Println("Invalid command. /? to see all available commands")
 		}
+		// TODO: add /quit command lol
 	}
 }
 
