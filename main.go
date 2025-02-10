@@ -62,8 +62,7 @@ func client() {
 		} else if strings.Contains(msg, "\\join") {
 			if len(strings.Split(msg, " ")) < 3 {
 				fmt.Println("\\join needs 2 parameters like so: \\join <server_ip> <port>")
-				// TODO: client should not disconnect
-				return
+				continue
 			}
 			join(conn, msg)
 		} else if msg == "\\register" {
