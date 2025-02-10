@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"runtime"
@@ -31,60 +32,123 @@ func main() {
 	}
 }
 
+// this just initializes the shell
 func client() {
-	ip, err := net.ResolveTCPAddr("tcp", "localhost:6969")
-	if err != nil {
-		log.Fatal(err)
-	}
-	conn, err := net.DialTCP("tcp", nil, ip)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-
-	fmt.Printf("\\? - to list all the available commands\n\n")
+	fmt.Printf("/? - to list all the available commands\n\n")
 	for {
-		fmt.Printf("[%s]> ", conn.LocalAddr().String())
+		fmt.Printf("> ")
 		reader := bufio.NewReader(os.Stdin)
 		input, err := reader.ReadString('\n')
 		msg := strings.TrimSpace(input)
 		if err != nil {
 			log.Fatal(err)
 		}
-		if msg == "\\?" {
-			fmt.Println("\\join <server_ip> <port> - joins a server given <server_ip> <port>")
-			fmt.Println("\\leave - disconnect to server")
-			fmt.Println("\\register - register unique handle or alias")
-			fmt.Println("\\dir - lists all files from server")
-			fmt.Println("\\get - download file from server")
-			fmt.Println("\\store - upload file to server")
-			fmt.Println("\\? - see all commands")
-		} else if strings.Contains(msg, "\\join") {
+		if msg == "/?" {
+			fmt.Println("/join <server_ip> <port> - joins a server given <server_ip> <port>")
+			fmt.Println("/leave - disconnect to server")
+			fmt.Println("/register <handle> - register unique handle or alias")
+			fmt.Println("/dir - lists all files from server")
+			fmt.Println("/get - download file from server")
+			fmt.Println("/store - upload file to server")
+			fmt.Println("/? - see all commands")
+		} else if strings.Contains(msg, "/join") {
 			if len(strings.Split(msg, " ")) < 3 {
-				fmt.Println("\\join needs 2 parameters like so: \\join <server_ip> <port>")
+				fmt.Println("/join needs 2 parameters like so: /join <server_ip> <port>")
 				continue
 			}
-			join(conn, msg)
-		} else if msg == "\\register" {
-		} else if msg == "\\dir" {
-		} else if msg == "\\get" {
-		} else if msg == "\\store" {
-		} else if msg == "\\leave" {
+			join(msg)
+			// TODO: maybe put the other commands below inside the join func then pass the net.Conn inside there
+			// TODO: if match to other "valid" commands (but without joining first) then custom error
 		} else {
-			fmt.Println("Invalid command. \\? to see all available commands")
+			fmt.Println("Invalid command. /? to see all available commands")
 		}
-		conn.Write([]byte(msg)) // send what command to server for parsing and logging
 	}
 }
 
-func join(conn net.Conn, msg string) {
+func join(msg string) {
 	// parse server_ip and port
-	ip := strings.Split(msg, " ")[1]
+	server_ip := strings.Split(msg, " ")[1]
 	port := strings.Split(msg, " ")[2]
-	fmt.Println("client: ", ip)
-	fmt.Println("client: ", port)
-	conn.Write([]byte(ip))
-	conn.Write([]byte(port))
+
+	ip, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", server_ip, port))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := net.DialTCP("tcp", nil, ip)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	fmt.Printf("Successfully connected to server: %s:%s\n", server_ip, port) // for client feedback
+
+	conn.Write([]byte(msg)) // send what command to server for parsing and logging
+	for {
+		fmt.Printf("> ")
+		input, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			log.Println(err)
+		}
+		msg := strings.TrimSpace(input)
+
+		// TODO: should register first before can access other commands
+		if strings.Contains(msg, "/register") {
+			if len(strings.Split(msg, " ")) < 2 {
+				fmt.Println("/register needs 1 parameter like so: /register Bob")
+				continue
+			}
+			register(conn, msg, strings.Split(msg, " ")[1]) // TODO: test this
+		} else if msg == "/dir" || msg == "/get" || msg == "store" {
+			fmt.Println("You must register a handle first (e.g. /register Bob)")
+		} else if msg == "/leave" {
+			// TODO: should be able to leave
+		} else if msg == "/join" {
+			fmt.Println("Already in connected in a server. You must /leave first before joining another connection.")
+		} else if msg == "/?" {
+			fmt.Println("/join <server_ip> <port> - joins a server given <server_ip> <port>")
+			fmt.Println("/leave - disconnect to server")
+			fmt.Println("/register <handle> - register unique handle or alias")
+			fmt.Println("/dir - lists all files from server")
+			fmt.Println("/get - download file from server")
+			fmt.Println("/store - upload file to server")
+			fmt.Println("/? - see all commands")
+		} else {
+			fmt.Println("Invalid command. /? to see all available commands")
+		}
+	}
+}
+
+func register(conn net.Conn, msg string, handle string) {
+	fmt.Printf("Successfully registered as %s\n", handle)
+
+	for {
+		fmt.Printf("> ")
+		input, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			log.Println(err)
+		}
+		msg := strings.TrimSpace(input)
+
+		if msg == "/dir" {
+		} else if msg == "/get" {
+		} else if msg == "/store" {
+		} else if msg == "/leave" {
+			// TODO: should be able to leave
+		} else if msg == "/join" {
+			fmt.Println("Already in connected in a server. You must /leave first before joining another connection.")
+		} else if msg == "/?" {
+			fmt.Println("/join <server_ip> <port> - joins a server given <server_ip> <port>")
+			fmt.Println("/leave - disconnect to server")
+			fmt.Println("/register - register unique handle or alias")
+			fmt.Println("/dir - lists all files from server")
+			fmt.Println("/get - download file from server")
+			fmt.Println("/store - upload file to server")
+			fmt.Println("/? - see all commands")
+		} else {
+			fmt.Println("Invalid command. /? to see all available commands")
+		}
+	}
 }
 
 func server() {
@@ -121,14 +185,12 @@ func handleConnection(conn net.Conn) {
 		if err != nil {
 			if err == io.EOF {
 				fmt.Printf("Client: [%s] disconnected\n", conn.RemoteAddr().String())
-				log.Printf("Client: [%s] disconnected\n", conn.RemoteAddr().String())
+				slog.Info(fmt.Sprintf("Client: [%s] disconnected\n", conn.RemoteAddr().String()))
 				return
 			}
 			log.Printf("Error reading from connection: %v\n", err)
 		}
 		// some processing...
-		// TODO: logging: "Received <command> from %s", conn.RemoteAddr().String()
-		fmt.Printf("Received command: %v from %s\n", string(buf[:n]), conn.RemoteAddr().String())
-		// TODO: logic: parse the commands with their features/capabilities
+		slog.Info(fmt.Sprintf("[%s]: %v\n", conn.RemoteAddr().String(), string(buf[:n]))) // log commands to server
 	}
 }
