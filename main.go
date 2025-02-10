@@ -7,10 +7,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 )
 
 func main() {
+	fmt.Printf("Number of CPUs: %d\n", runtime.NumCPU())
+	fmt.Printf("GOMAXPROCS: %d\n", runtime.GOMAXPROCS(0))
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("What to start (1 - client, 2 - server): ")
 	s, err := reader.ReadString('\n')
@@ -48,7 +51,14 @@ func client() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		conn.Write([]byte(msg))
+		switch msg {
+		case "\\?":
+		case "\\dir":
+		case "\\get":
+		default:
+			fmt.Println("Invalid command. \\? to see all available commands")
+		}
+		conn.Write([]byte(msg)) // send what command to server for parsing and logging
 		fmt.Println(msg)
 	}
 }
@@ -93,6 +103,8 @@ func handleConnection(conn net.Conn) {
 			log.Printf("Error reading from connection: %v\n", err)
 		}
 		// some processing...
-		fmt.Printf("Received data: %v from %s\n", string(buf[:n]), conn.RemoteAddr().String())
+		// TODO: logging: "Received <command> from %s", conn.RemoteAddr().String()
+		fmt.Printf("Received command: %v from %s\n", string(buf[:n]), conn.RemoteAddr().String())
+		// TODO: logic: parse the commands with their features/capabilities
 	}
 }
