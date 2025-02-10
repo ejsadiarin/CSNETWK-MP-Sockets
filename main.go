@@ -51,16 +51,41 @@ func client() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		switch msg {
-		case "\\?":
-		case "\\dir":
-		case "\\get":
-		default:
+		if msg == "\\?" {
+			fmt.Println("\\join <server_ip> <port> - joins a server given <server_ip> <port>")
+			fmt.Println("\\leave - disconnect to server")
+			fmt.Println("\\register - register unique handle or alias")
+			fmt.Println("\\dir - lists all files from server")
+			fmt.Println("\\get - download file from server")
+			fmt.Println("\\store - upload file to server")
+			fmt.Println("\\? - see all commands")
+		} else if strings.Contains(msg, "\\join") {
+			if len(strings.Split(msg, " ")) < 3 {
+				fmt.Println("\\join needs 2 parameters like so: \\join <server_ip> <port>")
+				// TODO: client should not disconnect
+				return
+			}
+			join(conn, msg)
+		} else if msg == "\\register" {
+		} else if msg == "\\dir" {
+		} else if msg == "\\get" {
+		} else if msg == "\\store" {
+		} else if msg == "\\leave" {
+		} else {
 			fmt.Println("Invalid command. \\? to see all available commands")
 		}
 		conn.Write([]byte(msg)) // send what command to server for parsing and logging
-		fmt.Println(msg)
 	}
+}
+
+func join(conn net.Conn, msg string) {
+	// parse server_ip and port
+	ip := strings.Split(msg, " ")[1]
+	port := strings.Split(msg, " ")[2]
+	fmt.Println("client: ", ip)
+	fmt.Println("client: ", port)
+	conn.Write([]byte(ip))
+	conn.Write([]byte(port))
 }
 
 func server() {
