@@ -1,28 +1,65 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"os"
+	"strings"
 )
 
 func main() {
-	s := "ejsadiarin"
-	fmt.Printf("eeeeeeeeeeee: %s\n", s)
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("What to start (1 - client, 2 - server): ")
+	s, err := reader.ReadString('\n')
+	if err != nil {
+		log.Fatal(err)
+	}
+	choice := strings.TrimSpace(s)
+	switch choice {
+	case "1":
+		client()
+	case "2":
+		server()
+	default:
+		fmt.Print("Invalid choice.")
+	}
 }
 
 func client() {
-	conn, err := net.Dial("tcp", "localhost:6969")
+	ip, err := net.ResolveTCPAddr("tcp", "localhost:6969")
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn, err := net.DialTCP("tcp", nil, ip)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer conn.Close()
-	s := "ejsadiarin"
-	fmt.Printf("eeeeeeeeeeee: %s\n", s)
+
+	fmt.Printf("\\? - to list all the available commands\n\n")
+	for {
+		fmt.Printf("[%s]> ", conn.LocalAddr().String())
+		reader := bufio.NewReader(os.Stdin)
+		input, err := reader.ReadString('\n')
+		msg := strings.TrimSpace(input)
+		if err != nil {
+			log.Fatal(err)
+		}
+		conn.Write([]byte(msg))
+		fmt.Println(msg)
+	}
 }
 
 func server() {
-	listener, err := net.Listen("tcp", ":6969")
+	addr, err := net.ResolveTCPAddr("tcp", ":6969")
+	if err != nil {
+		// slog.Info("server listening on port 6969")
+		log.Fatal(err)
+	}
+	listener, err := net.ListenTCP("tcp", addr)
 	if err != nil {
 		// slog.Info("server listening on port 6969")
 		log.Fatal(err)
@@ -45,10 +82,17 @@ func handleConnection(conn net.Conn) {
 	// create buffer
 	buf := make([]byte, 1024) // 1 KB (for 1MB: 1024 * 1024)
 	// read data from conn and store it in buf
-	n, err := conn.Read(buf)
-	if err != nil {
-		log.Fatal(err)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("Client: [%s] disconnected\n", conn.RemoteAddr().String())
+				log.Printf("Client: [%s] disconnected\n", conn.RemoteAddr().String())
+				return
+			}
+			log.Printf("Error reading from connection: %v\n", err)
+		}
+		// some processing...
+		fmt.Printf("Received data: %v from %s\n", string(buf[:n]), conn.RemoteAddr().String())
 	}
-	// some processing...
-	fmt.Printf("Received data: %v\n", buf[:n])
 }
