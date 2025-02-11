@@ -180,6 +180,10 @@ func register(conn net.Conn, msg string, handle string) bool {
 	}
 }
 
+func dir() {
+	dir := os.DirFS("/dir")
+}
+
 func server() {
 	addr, err := net.ResolveTCPAddr("tcp", ":6969")
 	if err != nil {

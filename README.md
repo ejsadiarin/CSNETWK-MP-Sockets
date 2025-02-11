@@ -8,4 +8,5 @@
 - `\dir` - lists all files from server
 - `\get` - download file from server 
 - `\store` - upload file to server 
+- `\quit` - quit the application
 - `\?` - see all commands
