@@ -50,23 +50,35 @@ func client() {
 			fmt.Println("/dir - lists all files from server")
 			fmt.Println("/get - download file from server")
 			fmt.Println("/store - upload file to server")
+			fmt.Println("/quit - exit application")
 			fmt.Println("/? - see all commands")
 		} else if strings.Contains(msg, "/join") {
 			if len(strings.Split(msg, " ")) < 3 {
 				fmt.Println("/join needs 2 parameters like so: /join <server_ip> <port>")
 				continue
 			}
-			join(msg)
-			// TODO: maybe put the other commands below inside the join func then pass the net.Conn inside there
-			// TODO: if match to other "valid" commands (but without joining first) then custom error
+			quit := join(msg)
+			if quit {
+				return
+			}
+			continue
+		} else if strings.Contains(msg, "/leave") {
+			fmt.Println("You are not yet connected to a server.")
+			continue
+		} else if strings.Contains(msg, "/dir") || strings.Contains(msg, "/store") || strings.Contains(msg, "/get") || strings.Contains(msg, "/register") {
+			fmt.Println("You must join a server first like so: /join localhost 6969")
+			continue
+		} else if strings.Contains(msg, "/quit") {
+			fmt.Println("Quitting application...")
+			return
 		} else {
 			fmt.Println("Invalid command. /? to see all available commands")
+			continue
 		}
-		// TODO: add /quit command lol
 	}
 }
 
-func join(msg string) {
+func join(msg string) bool {
 	// parse server_ip and port
 	server_ip := strings.Split(msg, " ")[1]
 	port := strings.Split(msg, " ")[2]
@@ -74,6 +86,7 @@ func join(msg string) {
 	ip, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%s", server_ip, port))
 	if err != nil {
 		log.Fatal(err)
+		// TODO: return false here so app won't crash if err on connecting to server
 	}
 
 	conn, err := net.DialTCP("tcp", nil, ip)
@@ -95,17 +108,25 @@ func join(msg string) {
 
 		// TODO: should register first before can access other commands
 		if strings.Contains(msg, "/register") {
-			if len(strings.Split(msg, " ")) < 2 {
-				fmt.Println("/register needs 1 parameter like so: /register Bob")
+			if len(strings.Split(msg, " ")) < 2 || len(strings.Split(msg, " ")) > 2 {
+				fmt.Println("/register has 1 parameter like so: /register Bob")
 				continue
 			}
-			register(conn, msg, strings.Split(msg, " ")[1]) // TODO: test this
-		} else if msg == "/dir" || msg == "/get" || msg == "store" {
+			quit := register(conn, msg, strings.Split(msg, " ")[1])
+			if quit {
+				return true
+			}
+			break // for /leave: leaving when registered means disconnecting from server
+		} else if strings.Contains(msg, "/dir") || strings.Contains(msg, "/get") || strings.Contains(msg, "/store") {
 			fmt.Println("You must register a handle first (e.g. /register Bob)")
-		} else if msg == "/leave" {
-			// TODO: should be able to leave
-		} else if msg == "/join" {
+		} else if strings.Contains(msg, "/leave") {
+			fmt.Println("Successfully disconnected from the server!")
+			break
+		} else if strings.Contains(msg, "/join") {
 			fmt.Println("Already in connected in a server. You must /leave first before joining another connection.")
+		} else if msg == "/quit" {
+			fmt.Println("Quitting application...")
+			return true
 		} else if msg == "/?" {
 			fmt.Println("/join <server_ip> <port> - joins a server given <server_ip> <port>")
 			fmt.Println("/leave - disconnect to server")
@@ -113,18 +134,20 @@ func join(msg string) {
 			fmt.Println("/dir - lists all files from server")
 			fmt.Println("/get - download file from server")
 			fmt.Println("/store - upload file to server")
+			fmt.Println("/quit - quit application")
 			fmt.Println("/? - see all commands")
 		} else {
 			fmt.Println("Invalid command. /? to see all available commands")
 		}
 	}
+	return false
 }
 
-func register(conn net.Conn, msg string, handle string) {
+func register(conn net.Conn, msg string, handle string) bool {
 	fmt.Printf("Successfully registered as %s\n", handle)
 
 	for {
-		fmt.Printf("> ")
+		fmt.Printf("[%s]> ", handle)
 		input, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			log.Println(err)
@@ -135,7 +158,8 @@ func register(conn net.Conn, msg string, handle string) {
 		} else if msg == "/get" {
 		} else if msg == "/store" {
 		} else if msg == "/leave" {
-			// TODO: should be able to leave
+			fmt.Println("Successfully disconnected from the server!")
+			return false
 		} else if msg == "/join" {
 			fmt.Println("Already in connected in a server. You must /leave first before joining another connection.")
 		} else if msg == "/?" {
@@ -145,7 +169,11 @@ func register(conn net.Conn, msg string, handle string) {
 			fmt.Println("/dir - lists all files from server")
 			fmt.Println("/get - download file from server")
 			fmt.Println("/store - upload file to server")
+			fmt.Println("/quit - quit application")
 			fmt.Println("/? - see all commands")
+		} else if msg == "/quit" {
+			fmt.Println("Quitting application...")
+			return true // quit signal to be used on the caller function
 		} else {
 			fmt.Println("Invalid command. /? to see all available commands")
 		}
@@ -185,7 +213,6 @@ func handleConnection(conn net.Conn) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			if err == io.EOF {
-				fmt.Printf("Client: [%s] disconnected\n", conn.RemoteAddr().String())
 				slog.Info(fmt.Sprintf("Client: [%s] disconnected\n", conn.RemoteAddr().String()))
 				return
 			}
