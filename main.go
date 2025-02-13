@@ -155,6 +155,7 @@ func register(conn net.Conn, msg string, handle string) bool {
 		msg := strings.TrimSpace(input)
 
 		if msg == "/dir" {
+			dir()
 		} else if msg == "/get" {
 		} else if msg == "/store" {
 		} else if msg == "/leave" {
@@ -181,7 +182,23 @@ func register(conn net.Conn, msg string, handle string) bool {
 }
 
 func dir() {
-	dir := os.DirFS("/dir")
+	dir, err := os.ReadDir("./dir")
+	if err != nil {
+		fmt.Println("error reading directory")
+	}
+
+	for _, v := range dir {
+		fmt.Println(v)
+	}
+}
+
+// TODO: implement these features
+func store() {
+	// upload
+}
+
+func get() {
+	// download
 }
 
 func server() {
