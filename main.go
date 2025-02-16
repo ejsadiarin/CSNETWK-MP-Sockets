@@ -2,12 +2,14 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -146,6 +148,9 @@ func join(msg string) bool {
 func register(conn net.Conn, msg string, handle string) bool {
 	fmt.Printf("Successfully registered as %s\n", handle)
 
+	// notify server that client registered
+	conn.Write([]byte(fmt.Sprintf("client %s registered as  %s\n", conn.LocalAddr().String(), handle)))
+
 	for {
 		fmt.Printf("[%s]> ", handle)
 		input, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -153,16 +158,57 @@ func register(conn net.Conn, msg string, handle string) bool {
 			log.Println(err)
 		}
 		msg := strings.TrimSpace(input)
+		log.Printf("msg: %v", msg)
 
 		if msg == "/dir" {
-			dir()
-		} else if msg == "/get" {
+			dir() // NOTE: only works locally, client and server should communicate via the connection only
+		} else if strings.Contains(msg, "/get") {
+			_, filename, found := strings.Cut(msg, " ")
+			if !found {
+				fmt.Println("missing filename parameter for /get")
+				continue
+			}
+
+			// NOTE: should request "/get filename" to server via connection (conn.Write) like so:
+			request := fmt.Sprintf("/get %s", filename)
+			_, err := conn.Write([]byte(request))
+			if err != nil {
+				fmt.Printf("cannot communicate with the server: %w\n", err)
+			}
+
+			bufSize := make([]byte, 8) // represents buffer of type uint64
+			// read file size first so we know until when to read without waiting for an EOF signal or error
+			_, err = io.ReadFull(conn, bufSize)
+			if err != nil {
+				fmt.Printf("cannot read file size: %v\n", err)
+				continue
+			}
+			// little endian is default in most network protocols and modern CPUs (x86 and ARM64)
+			fileSize := binary.LittleEndian.Uint64(bufSize)
+
+			out, err := os.Create(filename)
+			if err != nil {
+				fmt.Printf("cannot create file: %v\n", err)
+				continue
+			}
+			defer out.Close()
+
+			// read file contents from connection to out file
+			_, err = io.CopyN(out, conn, int64(fileSize))
+			if err != nil {
+				fmt.Printf("cannot receive file: %w\n", err)
+				continue
+
+			}
+			fmt.Printf("Successfully downloaded %s (%d bytes)\n", filename, fileSize)
 		} else if msg == "/store" {
 		} else if msg == "/leave" {
 			fmt.Println("Successfully disconnected from the server!")
 			return false
-		} else if msg == "/join" {
+		} else if strings.Contains(msg, "/join") {
 			fmt.Println("Already in connected in a server. You must /leave first before joining another connection.")
+		} else if strings.Contains(msg, "/register") {
+			fmt.Printf("You are already registered as %s.\n", handle)
 		} else if msg == "/?" {
 			fmt.Println("/join <server_ip> <port> - joins a server given <server_ip> <port>")
 			fmt.Println("/leave - disconnect to server")
@@ -187,6 +233,7 @@ func dir() {
 		fmt.Println("error reading directory")
 	}
 
+	// NOTE: can trim the "-" prefix before the file names
 	for _, v := range dir {
 		fmt.Println(v)
 	}
@@ -197,8 +244,32 @@ func store() {
 	// upload
 }
 
-func get() {
-	// download
+func getHandler(conn net.Conn, filename string) error {
+	filedata, err := os.ReadFile(filepath.Join("dir", filename))
+	if err != nil {
+		if err == os.ErrNotExist {
+			slog.Error(fmt.Sprintf("cannot read file that doesn't exist: %s, err: %v\n", filename, err))
+		}
+		return fmt.Errorf("file doesn't exist: %v\n", err)
+	}
+
+	// send the filesize first for the client to know how big is the file to be created and copied in the client
+	bufSize := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bufSize, uint64(len(filedata)))
+	_, err = conn.Write(bufSize)
+	if err != nil {
+		return fmt.Errorf("cannot send file size to client: %w\n", err)
+	}
+
+	// then send the whole file data
+	_, err = conn.Write(filedata)
+	if err != nil {
+		slog.Error(fmt.Sprintf("cannot read file that doesn't exist: %s, err: %v\n", filename, err))
+		return fmt.Errorf("failed to send file size: %v\n", err)
+	}
+
+	slog.Info(fmt.Sprintf("sending file: %s to client...", filename))
+	return nil
 }
 
 func server() {
@@ -240,6 +311,21 @@ func handleConnection(conn net.Conn) {
 			log.Printf("Error reading from connection: %v\n", err)
 		}
 		// some processing...
-		slog.Info(fmt.Sprintf("[%s]: %v\n", conn.RemoteAddr().String(), string(buf[:n]))) // log commands to server
+		cmd := string(buf[:n])
+		slog.Info(fmt.Sprintf("[%s]: %v\n", conn.RemoteAddr().String(), cmd)) // log commands to server
+		if strings.HasPrefix(cmd, "/get") {
+			if len(strings.Fields(cmd)) < 2 {
+				slog.Error("missing filename for /get")
+				_, err := conn.Write([]byte("missing filename for /get"))
+				if err != nil {
+					slog.Error("cannot write response to connection")
+				}
+				continue
+			}
+			filename := strings.Fields(cmd)[1]
+			if err := getHandler(conn, filename); err != nil {
+				slog.Error(fmt.Sprintf("Error handling get: %v\n", err))
+			}
+		}
 	}
 }
